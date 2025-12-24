@@ -428,10 +428,15 @@ class Torcp:
         return entryName in ['@eaDir', '.DS_Store', '.@__thumb']
 
     def selfGenCategoryDir(self, dirName):
-        return dirName in [
-            'MovieEncode', 'MovieRemux', 'MovieWebdl', 'MovieBDMV', 'BDMVISO',
-            self.CATNAME_MOVIE, self.CATNAME_TV, 'TMDbNotFound'
+        special_folders = [
+            'MovieEncode', 'MovieRemux', 'MovieWebdl', 'MovieBDMV',
+            self.CATNAME_MOVIE, self.CATNAME_TV,
+            self.ARGS.tmdb_not_found_folder
         ]
+        # Include legacy BDMV/ISO folders when not using unified-folders
+        if not self.ARGS.unified_folders:
+            special_folders.extend(['BDMVISO', 'MovieM2TS'])
+        return dirName in special_folders
 
     def genTVSeasonEpisonGroup(self, mediaFilename, groupName, resolution):
         tt = TorTitle(mediaFilename)
@@ -534,9 +539,14 @@ class Torcp:
             return
         if os.path.isdir(os.path.join(tvSourceFolder, 'BDMV')):
             if self.ARGS.full_bdmv or self.ARGS.extract_bdmv:
-                # a BDMV dir in a TV folder, treat as Movie
-                self.processBDMV(tvSourceFolder, genFolder, 'MovieM2TS', tmdbParser=folderTmdbParser)
-                self.targetDirHook(os.path.join('MovieM2TS', genFolder), tmdbidstr=str(folderTmdbParser.tmdbid), tmdbcat=folderTmdbParser.tmdbcat, tmdbtitle=folderTmdbParser.title, tmdbobj=folderTmdbParser)
+                if self.ARGS.unified_folders:
+                    # Keep in TV folder structure
+                    self.processBDMV(tvSourceFolder, genFolder, self.CATNAME_TV, tmdbParser=folderTmdbParser)
+                    self.targetDirHook(os.path.join(self.CATNAME_TV, genFolder), tmdbidstr=str(folderTmdbParser.tmdbid), tmdbcat=folderTmdbParser.tmdbcat, tmdbtitle=folderTmdbParser.title, tmdbobj=folderTmdbParser)
+                else:
+                    # Legacy behavior: separate MovieM2TS folder
+                    self.processBDMV(tvSourceFolder, genFolder, 'MovieM2TS', tmdbParser=folderTmdbParser)
+                    self.targetDirHook(os.path.join('MovieM2TS', genFolder), tmdbidstr=str(folderTmdbParser.tmdbid), tmdbcat=folderTmdbParser.tmdbcat, tmdbtitle=folderTmdbParser.title, tmdbobj=folderTmdbParser)
             else:
                 logger.info('Skip BDMV/ISO  %s ' % genFolder)
                 self.record_skip(os.path.basename(tvSourceFolder), "BDMV (use --full-bdmv)")
@@ -576,6 +586,16 @@ class Torcp:
                     seasonFolderFullPath = os.path.join(self.CATNAME_TV, genFolder,
                                                         parseSeason)
                     self.targetCopy(tvitemPath, seasonFolderFullPath, newTVFileName)
+                elif file_ext.lower() == '.iso':
+                    if self.ARGS.full_bdmv or self.ARGS.extract_bdmv:
+                        if self.ARGS.unified_folders:
+                            # Keep ISO in TV folder structure
+                            destFolder = os.path.join(self.CATNAME_TV, genFolder, parseSeason)
+                            self.targetCopy(tvitemPath, destFolder)
+                        else:
+                            # Legacy: skip ISO in TV folders
+                            logger.info('Skip ISO in TV folder: %s' % tvitem)
+                            self.record_skip(tvitem, "ISO in TV folder")
 
         self.mkPlexMatch(os.path.join(self.CATNAME_TV, genFolder), folderTmdbParser)
         self.mkMediaNfo(os.path.join(self.CATNAME_TV, genFolder), "", folderTmdbParser)
@@ -659,17 +679,21 @@ class Torcp:
         return cat
 
     def genCatFolderName(self, parser):
-        if self.ARGS.tmdb_api_key and parser.tmdbid <= 0 and parser.tmdbcat in ['tv', 'movie']:
-            return 'TMDbNotFound'
+        # Always treat HDTV as TV
+        effective_tmdbcat = 'tv' if parser.tmdbcat == 'HDTV' else parser.tmdbcat
+
+        # Check for TMDb lookup failure
+        if self.ARGS.tmdb_api_key and parser.tmdbid <= 0 and effective_tmdbcat in ['tv', 'movie']:
+            return self.ARGS.tmdb_not_found_folder
+
+        if effective_tmdbcat == 'movie':
+            self.CATNAME_MOVIE = self.ARGS.movie_folder_name
+            return self.ARGS.movie_folder_name
+        elif effective_tmdbcat == 'tv':
+            self.CATNAME_TV = self.ARGS.tv_folder_name
+            return self.ARGS.tv_folder_name
         else:
-            if parser.tmdbcat == 'movie':
-                self.CATNAME_MOVIE = self.ARGS.movie_folder_name
-                return self.ARGS.movie_folder_name
-            elif parser.tmdbcat == 'tv':
-                self.CATNAME_TV = self.ARGS.tv_folder_name
-                return self.ARGS.tv_folder_name
-            else:
-                return parser.ccfcat
+            return parser.ccfcat
 
     def isCollections(self, folderName):
         return re.search(r'(\bPack$|合集|Anthology|Trilogy|Quadrilogy|Tetralogy|(?<!Criterion[ .])Collections?|国语配音4K动画电影$)',
@@ -728,8 +752,14 @@ class Torcp:
         if os.path.isdir(os.path.join(mediaSrc, 'BDMV')):
             # break, process BDMV dir for this dir
             if self.ARGS.full_bdmv or self.ARGS.extract_bdmv:
-                self.processBDMV(mediaSrc, folderGenName, 'MovieM2TS', tmdbParser=folderTmdbParser)
-                self.targetDirHook(os.path.join('MovieM2TS', folderGenName), tmdbidstr=str(folderTmdbParser.tmdbid), tmdbcat=folderTmdbParser.tmdbcat, tmdbtitle=folderTmdbParser.title, tmdbobj=folderTmdbParser)
+                if self.ARGS.unified_folders:
+                    # Keep in Movie folder structure
+                    self.processBDMV(mediaSrc, folderGenName, self.CATNAME_MOVIE, tmdbParser=folderTmdbParser)
+                    self.targetDirHook(os.path.join(self.CATNAME_MOVIE, folderGenName), tmdbidstr=str(folderTmdbParser.tmdbid), tmdbcat=folderTmdbParser.tmdbcat, tmdbtitle=folderTmdbParser.title, tmdbobj=folderTmdbParser)
+                else:
+                    # Legacy behavior: separate MovieM2TS folder
+                    self.processBDMV(mediaSrc, folderGenName, 'MovieM2TS', tmdbParser=folderTmdbParser)
+                    self.targetDirHook(os.path.join('MovieM2TS', folderGenName), tmdbidstr=str(folderTmdbParser.tmdbid), tmdbcat=folderTmdbParser.tmdbcat, tmdbtitle=folderTmdbParser.title, tmdbobj=folderTmdbParser)
             else:
                 logger.info('Skip BDMV/ISO  %s ' % mediaSrc)
                 self.record_skip(os.path.basename(mediaSrc), "BDMV (use --full-bdmv)")
@@ -756,20 +786,28 @@ class Torcp:
                 # Dir in movie folder
                 if os.path.isdir(os.path.join(mediaSrc, movieItem, 'BDMV')):
                     logger.info(" Alert: MovieBDMV in a Movie dir.....?")
-                    self.processBDMV(os.path.join(mediaSrc, movieItem),
-                                os.path.join(folderGenName, movieItem),
-                                'MovieM2TS')
+                    if self.ARGS.unified_folders:
+                        self.processBDMV(os.path.join(mediaSrc, movieItem),
+                                    os.path.join(folderGenName, movieItem),
+                                    self.CATNAME_MOVIE)
+                    else:
+                        self.processBDMV(os.path.join(mediaSrc, movieItem),
+                                    os.path.join(folderGenName, movieItem),
+                                    'MovieM2TS')
                 else:
                     logger.info('SKip dir in movie folder: [%s] ' % movieItem)
                 continue
-            
+
             filename, file_ext = os.path.splitext(movieItem)
             if file_ext.lower() in ['.iso']:
                 # TODO: aruba need iso when extract_bdmv
                 if self.ARGS.full_bdmv or self.ARGS.extract_bdmv:
-                    destCatFolderName = os.path.join('BDMVISO', folderGenName)
+                    if self.ARGS.unified_folders:
+                        destCatFolderName = os.path.join(self.CATNAME_MOVIE, folderGenName)
+                    else:
+                        destCatFolderName = os.path.join('BDMVISO', folderGenName)
                     self.targetCopy(os.path.join(mediaSrc, movieItem), destCatFolderName)
-                    self.targetDirHook(destCatFolderName, tmdbidstr='', tmdbcat='iso', tmdbtitle=movieItem, tmdbobj=None) 
+                    self.targetDirHook(destCatFolderName, tmdbidstr='', tmdbcat='iso', tmdbtitle=movieItem, tmdbobj=None)
                 else:
                     logger.info('SKip iso file: [%s] ' % movieItem)
                 continue
@@ -993,7 +1031,11 @@ class Torcp:
             elif file_ext.lower() in ['.iso']:
                 #  TODO: aruba need iso when extract_bdmv
                 if self.ARGS.full_bdmv or self.ARGS.extract_bdmv:
-                    bdmvFolder = os.path.join('BDMVISO', destFolderName)
+                    if self.ARGS.unified_folders:
+                        # Use the actual category (Movie or TV)
+                        bdmvFolder = os.path.join(cat, destFolderName)
+                    else:
+                        bdmvFolder = os.path.join('BDMVISO', destFolderName)
                     self.targetCopy(mediaSrc, bdmvFolder)
                     self.targetDirHook(bdmvFolder, tmdbidstr='', tmdbcat='iso', tmdbtitle=itemName, tmdbobj=None)
                 else:
@@ -1186,6 +1228,13 @@ class Torcp:
         parser.add_argument('--save-failed',
                             type=str,
                             help='save failed items list to specified file')
+        parser.add_argument('--unified-folders',
+                            action='store_true',
+                            help='merge BDMV/ISO into Movie/TV folders based on content category')
+        parser.add_argument('--tmdb-not-found-folder',
+                            type=str,
+                            default='TMDbNotFound',
+                            help='folder name for items that fail TMDb lookup (default: TMDbNotFound)')
 
         self.ARGS = parser.parse_args(argv)
         self.ensureIMDb()
