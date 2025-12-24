@@ -8,6 +8,7 @@ A script to organize media files in Emby-happy way, create hardlink in a seperat
 
 ## Last update:
 * ...refer to [chinese version](README.md).....
+* 2025.12.24: TMDB query cache: auto-caches TMDB queries to `~/.torcp/tmdb_cache.json` with 30-day expiry. Use `--no-tmdb-cache` to disable, `--clear-tmdb-cache` to clear cache
 * 2025.12.24: `--progress` enable progress bar display when processing files
 * 2022.4.3: `--make-log` create a log file to trace the origin file location and folder name
 * 2022.3.23: `--symbolink` support symbol link
@@ -31,6 +32,7 @@ usage: tp.py [-h] -d HD_PATH [-e KEEP_EXT] [-l LANG] [--genre GENRE] [--other-di
              [--tv-folder-name TV_FOLDER_NAME] [--movie-folder-name MOVIE_FOLDER_NAME] [--tv] [--movie] [--dryrun] [--single] [--extract-bdmv] [--full-bdmv] [--origin-name] [--tmdb-origin-name]
              [--sleep SLEEP] [--move-run] [--make-log] [--symbolink] [--cache] [--emby-bracket] [--plex-bracket] [--make-plex-match] [--make-nfo] [--after-copy-script AFTER_COPY_SCRIPT]
              [--imdbid IMDBID] [--tmdbid TMDBID] [--extitle EXTITLE] [--site-str SITE_STR] [--add-year-dir] [--genre-with-area GENRE_WITH_AREA]
+             [--progress] [--no-tmdb-cache] [--clear-tmdb-cache]
              MEDIA_DIR
 
 torcp: a script hardlink media files and directories in Emby-happy naming and structs.
@@ -84,7 +86,10 @@ options:
   --site-str SITE_STR   site-id(ex. hds-12345) folder name, set site strs like ('chd,hds,ade,ttg').
   --add-year-dir        Add a year dir above the media folder
   --genre-with-area GENRE_WITH_AREA
-                        specify genres with area subdir, seperated with comma  
+                        specify genres with area subdir, seperated with comma
+  --progress            enable progress bar display
+  --no-tmdb-cache       disable TMDB query cache
+  --clear-tmdb-cache    clear TMDB cache before running
 ```
 
 ### Alternatively, call with `python tp.py`

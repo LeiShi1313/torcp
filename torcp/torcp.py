@@ -25,6 +25,7 @@ from torcp.torcategory import TorCategory
 from torcp.tortitle import TorTitle, is0DayName
 from torcp.cacheman import CacheManager
 from torcp.progress import TorcpProgress
+from torcp.tmdbcache import TMDbCache
 import xml.etree.ElementTree as ET
 
 def area5dir(arecode):
@@ -73,6 +74,7 @@ class Torcp:
         self.CATNAME_TV = 'TV'
         self.CATNAME_MOVIE = 'Movie'
         self.progress = None  # Will be initialized after args are parsed
+        self.tmdb_cache = None  # Will be initialized after args are parsed
 
     def ensureDir(self, file_path):
         if os.path.isfile(file_path):
@@ -491,7 +493,7 @@ class Torcp:
         foldername = destFolderName
         testFile = self.getFirstMediaFile(folderPath)
         if testFile:
-            p = TMDbNameParser(self.ARGS.tmdb_api_key, self.ARGS.tmdb_lang)
+            p = TMDbNameParser(self.ARGS.tmdb_api_key, self.ARGS.tmdb_lang, cache=self.tmdb_cache)
             p.parse(testFile, useTMDb=False)
             if not folderGroup:
                 group = p.group
@@ -755,7 +757,7 @@ class Torcp:
                     fnok = is0DayName(movieItem)
                     if fnok:
                         pf = TMDbNameParser(self.ARGS.tmdb_api_key, self.ARGS.tmdb_lang,
-                                            ccfcat_hard=self.setArgsCategory())
+                                            ccfcat_hard=self.setArgsCategory(), cache=self.tmdb_cache)
                         pf.parse(movieItem, useTMDb=(self.ARGS.tmdb_api_key is not None))
                         pf.title = self.fixNtName(pf.title)
                         if pf.tmdbid > 0 or fnok:
@@ -908,7 +910,7 @@ class Torcp:
             displayName = itemName[:35] + "..." if len(itemName) > 35 else itemName
             self.progress.set_status(f"TMDB: {displayName}")
 
-        p = TMDbNameParser(self.ARGS.tmdb_api_key, self.ARGS.tmdb_lang, ccfcat_hard=cat)
+        p = TMDbNameParser(self.ARGS.tmdb_api_key, self.ARGS.tmdb_lang, ccfcat_hard=cat, cache=self.tmdb_cache)
         p.parse(itemName, useTMDb=(self.ARGS.tmdb_api_key is not None), hasIMDbId=imdbidstr, hasTMDbId=tmdbidstr, exTitle=self.ARGS.extitle)
         p.title = self.fixNtName(p.title)
         cat = self.genCatFolderName(p)
@@ -1140,6 +1142,12 @@ class Torcp:
         parser.add_argument('--progress',
                             action='store_true',
                             help='enable progress bar display')
+        parser.add_argument('--no-tmdb-cache',
+                            action='store_true',
+                            help='disable TMDB query cache')
+        parser.add_argument('--clear-tmdb-cache',
+                            action='store_true',
+                            help='clear TMDB cache before running')
 
         self.ARGS = parser.parse_args(argv)
         self.ensureIMDb()
@@ -1239,6 +1247,13 @@ class Torcp:
         # Initialize progress bar
         self.progress = TorcpProgress(disable=not self.ARGS.progress)
 
+        # Initialize TMDB cache
+        if self.ARGS.tmdb_api_key and not self.ARGS.no_tmdb_cache:
+            self.tmdb_cache = TMDbCache()
+            if self.ARGS.clear_tmdb_cache:
+                self.tmdb_cache.clear()
+                logger.info("TMDB cache cleared")
+
         logger.info("=========>>> " +
             datetime.datetime.now().astimezone().strftime("%Y-%m-%dT%H:%M:%S %z"))
 
@@ -1317,6 +1332,10 @@ class Torcp:
 
         if self.ARGS.cache:
             searchCache.closeCache()
+
+        # Save TMDB cache
+        if self.tmdb_cache:
+            self.tmdb_cache.close()
 
 
 def main():

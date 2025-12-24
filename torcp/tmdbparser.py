@@ -68,8 +68,9 @@ def parseTMDbStr(tmdbstr):
         return '', ''
 
 class TMDbNameParser():
-    def __init__(self, tmdb_api_key, tmdb_lang, ccfcat_hard=None):
+    def __init__(self, tmdb_api_key, tmdb_lang, ccfcat_hard=None, cache=None):
         self.ccfcatHard = ccfcat_hard
+        self.cache = cache  # TMDbCache instance for caching queries
         self.ccfcat = ''
         self.title = ''
         self.year = 0
@@ -97,6 +98,45 @@ class TMDbNameParser():
         else:
             self.tmdb = None
             # self.tmdb.api_key = None
+
+    def _make_cache_key(self, media_type, title, year):
+        """Create normalized cache key."""
+        normalized_title = title.lower().strip() if title else ''
+        year_str = str(year) if year else '0'
+        media_type_str = media_type.lower() if media_type else 'unknown'
+        return f"{media_type_str}|{normalized_title}|{year_str}"
+
+    def _to_cache_entry(self):
+        """Convert current state to cache entry."""
+        return {
+            'tmdbid': self.tmdbid,
+            'title': self.title,
+            'year': self.year,
+            'tmdbcat': self.tmdbcat,
+            'original_language': self.original_language,
+            'popularity': self.popularity,
+            'genre_ids': self.genre_ids,
+            'poster_path': self.poster_path,
+            'release_air_date': self.release_air_date
+        }
+
+    def _restore_from_cache(self, cached):
+        """Restore state from cache entry."""
+        self.tmdbid = cached.get('tmdbid', 0)
+        self.title = cached.get('title', '')
+        self.year = cached.get('year', 0)
+        self.tmdbcat = cached.get('tmdbcat', '')
+        self.original_language = cached.get('original_language', '')
+        self.popularity = cached.get('popularity', 0)
+        self.genre_ids = cached.get('genre_ids', [])
+        self.poster_path = cached.get('poster_path', '')
+        self.release_air_date = cached.get('release_air_date', '')
+
+    def _store_in_cache(self, cache_key):
+        """Store current state in cache."""
+        if self.cache and self.tmdbid > 0:
+            self.cache.set(cache_key, self._to_cache_entry())
+            logger.info(f"Cached: {cache_key} -> tmdbid={self.tmdbid}")
 
     def clearData(self):
         self.ccfcat = ''
@@ -448,6 +488,17 @@ class TMDbNameParser():
         return titlestr
 
     def searchTMDb(self, title, cat=None, parseYearStr=None, cntitle=None):
+        # Check cache first
+        intyear_for_cache = self.getYear(parseYearStr) if parseYearStr else 0
+        cache_key = self._make_cache_key(cat, title, intyear_for_cache)
+
+        if self.cache:
+            cached = self.cache.get(cache_key)
+            if cached:
+                logger.info(f"Cache hit: {cache_key}")
+                self._restore_from_cache(cached)
+                return self.tmdbid, self.title, self.year
+
         searchList = []
         if title == cntitle:
             cntitle = ''
@@ -514,11 +565,13 @@ class TMDbNameParser():
                     result = self.findYearMatch(results, intyear, strict=True)
                     if result:
                         self.saveTmdbTVResultMatch(result)
+                        self._store_in_cache(cache_key)
                         return self.tmdbid, self.title, self.year
                     else:
                         result = self.findYearMatch(results, intyear, strict=False)
                         if result:
                             self.saveTmdbTVResultMatch(result)
+                            self._store_in_cache(cache_key)
                             return self.tmdbid, self.title, self.year
 
             elif s[0] == 'movie' and s[1]:
@@ -535,11 +588,13 @@ class TMDbNameParser():
                     result = self.findYearMatch(results, intyear, strict=True)
                     if result:
                         self.saveTmdbMovieResult(result)
+                        self._store_in_cache(cache_key)
                         return self.tmdbid, self.title, self.year
                     else:
                         result = self.findYearMatch(results, intyear, strict=False)
                         if result:
                             self.saveTmdbMovieResult(result)
+                            self._store_in_cache(cache_key)
                             return self.tmdbid, self.title, self.year
                 elif intyear > 0:
                     # results = search.movies({"query": s[1], "page": 1})
@@ -549,6 +604,7 @@ class TMDbNameParser():
                         result = self.findYearMatch(results, intyear, strict=False)
                         if result:
                             self.saveTmdbMovieResult(result)
+                            self._store_in_cache(cache_key)
                             return self.tmdbid, self.title, self.year
             elif s[0] == 'multi' and s[1]:
                 logger.info('Search Multi:  %s (%d)' % (s[1], intyear))
@@ -564,11 +620,13 @@ class TMDbNameParser():
                     result = self.findYearMatch(results, intyear, strict=True)
                     if result:
                         self.saveTmdbMultiResult(result)
+                        self._store_in_cache(cache_key)
                         return self.tmdbid, self.title, self.year
                     else:
                         result = self.findYearMatch(results, intyear, strict=False)
                         if result:
                             self.saveTmdbMultiResult(result)
+                            self._store_in_cache(cache_key)
                             return self.tmdbid, self.title, self.year
                 elif intyear > 0:
                     # results = search.multi({"query": s[1], "page": 1})
@@ -578,11 +636,13 @@ class TMDbNameParser():
                         result = self.findYearMatch(results, intyear, strict=True)
                         if result:
                             self.saveTmdbMultiResult(result)
+                            self._store_in_cache(cache_key)
                             return self.tmdbid, self.title, self.year
                         else:
                             result = self.findYearMatch(results, intyear, strict=False)
                             if result:
                                 self.saveTmdbMultiResult(result)
+                                self._store_in_cache(cache_key)
                                 return self.tmdbid, self.title, self.year
 
         logger.info('TMDb Not found: [%s] [%s] ' % (title, cntitle))
@@ -606,6 +666,15 @@ class TMDbNameParser():
         return False
 
     def searchTMDbByIMDbId(self, imdbid):
+        # Check cache first
+        cache_key = f"imdbid|{imdbid}"
+        if self.cache:
+            cached = self.cache.get(cache_key)
+            if cached:
+                logger.info(f"Cache hit: {cache_key}")
+                self._restore_from_cache(cached)
+                return self.tmdbid, self.title, self.year
+
         f = Find(self.tmdb)
         logger.info("Search : " + imdbid)
         t = f.find_by_imdb_id(imdb_id=imdbid)
@@ -638,6 +707,11 @@ class TMDbNameParser():
                 else:
                     pass
 
+        # Store in cache if successful
+        if self.cache and self.tmdbid > 0:
+            self.cache.set(cache_key, self._to_cache_entry())
+            logger.info(f"Cached: {cache_key} -> tmdbid={self.tmdbid}")
+
         return self.tmdbid, self.title, self.year
 
 
@@ -666,13 +740,29 @@ class TMDbNameParser():
         return self.tmdbid, self.title, self.year
 
     def searchTMDbByTMDbId(self, cat, tmdbid):
+        # Check cache first
+        cache_key = f"tmdbid|{cat or 'unknown'}|{tmdbid}"
+        if self.cache:
+            cached = self.cache.get(cache_key)
+            if cached:
+                logger.info(f"Cache hit: {cache_key}")
+                self._restore_from_cache(cached)
+                return self.tmdbid, self.title, self.year
+
         if cat == 'tv':
-            return self.searchTMDbByTMDbIdTv(tmdbid)
+            result = self.searchTMDbByTMDbIdTv(tmdbid)
         elif cat == 'movie':
-            return self.searchTMDbByTMDbIdMovie(tmdbid)
+            result = self.searchTMDbByTMDbIdMovie(tmdbid)
         else:
             self.searchTMDbByTMDbIdTv(tmdbid)
             if self.tmdbid <= 0:
-                return self.searchTMDbByTMDbIdMovie(tmdbid)
+                result = self.searchTMDbByTMDbIdMovie(tmdbid)
+            else:
+                result = (self.tmdbid, self.title, self.year)
+
+        # Store in cache if successful
+        if self.cache and self.tmdbid > 0:
+            self.cache.set(cache_key, self._to_cache_entry())
+            logger.info(f"Cached: {cache_key} -> tmdbid={self.tmdbid}")
 
         return self.tmdbid, self.title, self.year
