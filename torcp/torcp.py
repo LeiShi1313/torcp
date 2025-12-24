@@ -814,7 +814,6 @@ class Torcp:
 
             if not self.isMediaFileType(file_ext):
                 logger.info('Skip : %s ' % movieItem)
-                self.record_skip(movieItem, "unsupported file type")
                 continue
 
             p = folderTmdbParser
@@ -952,6 +951,7 @@ class Torcp:
         # exportTargetDir = os.path.join(ARGS.hd_path, targetDir)
         exportTargetDir = targetDir
         logger.info('Target Dir: ' + exportTargetDir)
+        self.record_success()
         if self.EXPORT_OBJ:
             self.EXPORT_OBJ.onOneItemTorcped(exportTargetDir, self.CUR_MEDIA_NAME, tmdbidstr, tmdbcat, tmdbtitle, tmdbobj)
         if self.ARGS.after_copy_script:
@@ -1043,7 +1043,6 @@ class Torcp:
                     self.record_skip(itemName, "ISO file (use --full-bdmv)")
             else:
                 logger.info('Skip file:  %s ' % mediaSrc)
-                self.record_skip(itemName, "unsupported file type")
         else:
             if cat == self.CATNAME_TV:
                 self.copyTVFolderItems(mediaSrc, destFolderName, p.season, p.group,
