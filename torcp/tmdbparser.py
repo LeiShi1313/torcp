@@ -107,18 +107,27 @@ class TMDbNameParser():
         return f"{media_type_str}|{normalized_title}|{year_str}"
 
     def _to_cache_entry(self):
-        """Convert current state to cache entry."""
-        return {
-            'tmdbid': self.tmdbid,
-            'title': self.title,
-            'year': self.year,
-            'tmdbcat': self.tmdbcat,
-            'original_language': self.original_language,
-            'popularity': self.popularity,
-            'genre_ids': self.genre_ids,
-            'poster_path': self.poster_path,
-            'release_air_date': self.release_air_date
-        }
+        """Convert current state to cache entry (JSON-serializable)."""
+        entry = {}
+        if self.tmdbid:
+            entry['tmdbid'] = int(self.tmdbid)
+        if self.title:
+            entry['title'] = str(self.title)
+        if self.year:
+            entry['year'] = int(self.year)
+        if self.tmdbcat:
+            entry['tmdbcat'] = str(self.tmdbcat)
+        if self.original_language:
+            entry['original_language'] = str(self.original_language)
+        if self.popularity:
+            entry['popularity'] = float(self.popularity)
+        if self.genre_ids:
+            entry['genre_ids'] = [int(g) if hasattr(g, '__int__') else g for g in self.genre_ids]
+        if self.poster_path:
+            entry['poster_path'] = str(self.poster_path)
+        if self.release_air_date:
+            entry['release_air_date'] = str(self.release_air_date)
+        return entry
 
     def _restore_from_cache(self, cached):
         """Restore state from cache entry."""
