@@ -14,6 +14,7 @@
 * [刮削攻略](刮削攻略.md)
 
 ## 2 Last Update
+* 2025.12.24 处理报告：运行结束后显示处理统计，包括跳过和失败的项目。使用 `--save-skipped` 和 `--save-failed` 保存到文件
 * 2025.12.24 TMDB查询缓存：自动缓存TMDB查询结果到 `~/.torcp/tmdb_cache.json`，30天过期。使用 `--no-tmdb-cache` 禁用，`--clear-tmdb-cache` 清除缓存
 * 2025.12.24 `--progress` 显示进度条，处理大量文件时可显示处理进度
 * 2025.7.27 支持strm；更新 tmdbv3api
@@ -144,6 +145,8 @@ options:
   --progress            enable progress bar display
   --no-tmdb-cache       disable TMDB query cache
   --clear-tmdb-cache    clear TMDB cache before running
+  --save-skipped FILE   save skipped items list to specified file
+  --save-failed FILE    save failed items list to specified file
 ```
 
 

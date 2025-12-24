@@ -8,6 +8,7 @@ A script to organize media files in Emby-happy way, create hardlink in a seperat
 
 ## Last update:
 * ...refer to [chinese version](README.md).....
+* 2025.12.24: Processing report: shows summary at end with skipped/failed items. Use `--save-skipped` and `--save-failed` to save to files
 * 2025.12.24: TMDB query cache: auto-caches TMDB queries to `~/.torcp/tmdb_cache.json` with 30-day expiry. Use `--no-tmdb-cache` to disable, `--clear-tmdb-cache` to clear cache
 * 2025.12.24: `--progress` enable progress bar display when processing files
 * 2022.4.3: `--make-log` create a log file to trace the origin file location and folder name
@@ -90,6 +91,8 @@ options:
   --progress            enable progress bar display
   --no-tmdb-cache       disable TMDB query cache
   --clear-tmdb-cache    clear TMDB cache before running
+  --save-skipped FILE   save skipped items list to specified file
+  --save-failed FILE    save failed items list to specified file
 ```
 
 ### Alternatively, call with `python tp.py`

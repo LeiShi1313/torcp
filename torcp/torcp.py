@@ -75,6 +75,24 @@ class Torcp:
         self.CATNAME_MOVIE = 'Movie'
         self.progress = None  # Will be initialized after args are parsed
         self.tmdb_cache = None  # Will be initialized after args are parsed
+        # Processing statistics
+        self.stats = {
+            'processed': 0,
+            'skipped': [],  # List of (item_name, reason)
+            'failed': [],   # List of (item_name, reason)
+        }
+
+    def record_skip(self, item_name, reason):
+        """Record a skipped item with reason."""
+        self.stats['skipped'].append((item_name, reason))
+
+    def record_fail(self, item_name, reason):
+        """Record a failed item with reason."""
+        self.stats['failed'].append((item_name, reason))
+
+    def record_success(self):
+        """Record a successfully processed item."""
+        self.stats['processed'] += 1
 
     def ensureDir(self, file_path):
         if os.path.isfile(file_path):
@@ -118,6 +136,7 @@ class Torcp:
     def hdlinkCopy(self, fromLoc, toLocPath, toLocFile=''):
         if os.path.islink(fromLoc):
             logger.info('SKIP symbolic link: [%s] ' % fromLoc)
+            self.record_skip(os.path.basename(fromLoc), "symbolic link")
             return
         destDir = self.getDestDir(toLocPath)
 
@@ -158,10 +177,12 @@ class Torcp:
     def pathMove(self, fromLoc, toLocFolder, toLocFile=''):
         if not os.path.exists(fromLoc):
             logger.warning('[%s] not exists. ' % fromLoc)
+            self.record_fail(os.path.basename(fromLoc), "source not found")
             return
 
         if os.path.islink(fromLoc):
             logger.info('SKIP symbolic link: [%s] ' % fromLoc)
+            self.record_skip(os.path.basename(fromLoc), "symbolic link")
             return
         # destDir = os.path.join(self.ARGS.hd_path, toLocFolder)
         destDir = self.getDestDir(toLocFolder)
@@ -202,6 +223,7 @@ class Torcp:
     def symbolLink(self, fromLoc, toLocPath, toLocFile=''):
         if os.path.islink(fromLoc):
             logger.info('SKIP symbolic link: [%s] ' % fromLoc)
+            self.record_skip(os.path.basename(fromLoc), "symbolic link")
             return
         # destDir = os.path.join(self.ARGS.hd_path, toLocPath)
         destDir = self.getDestDir(toLocPath)
@@ -247,6 +269,7 @@ class Torcp:
     def targetCopy(self, fromLoc, toLocPath, toLocFile=''):
         if os.path.islink(fromLoc):
             logger.info('SKIP symbolic link: [%s] ' % fromLoc)
+            self.record_skip(os.path.basename(fromLoc), "symbolic link")
             return
 
         if self.ARGS.move_run:
@@ -507,6 +530,7 @@ class Torcp:
                         resolution, folderTmdbParser):
         if os.path.islink(tvSourceFolder):
             logger.info('SKIP symbolic link: [%s] ' % tvSourceFolder)
+            self.record_skip(os.path.basename(tvSourceFolder), "symbolic link")
             return
         if os.path.isdir(os.path.join(tvSourceFolder, 'BDMV')):
             if self.ARGS.full_bdmv or self.ARGS.extract_bdmv:
@@ -515,6 +539,7 @@ class Torcp:
                 self.targetDirHook(os.path.join('MovieM2TS', genFolder), tmdbidstr=str(folderTmdbParser.tmdbid), tmdbcat=folderTmdbParser.tmdbcat, tmdbtitle=folderTmdbParser.title, tmdbobj=folderTmdbParser)
             else:
                 logger.info('Skip BDMV/ISO  %s ' % genFolder)
+                self.record_skip(os.path.basename(tvSourceFolder), "BDMV (use --full-bdmv)")
             return
 
         parseSeason, parseGroup, genFolder, resolution = self.fixSeasonGroupWithFilename(
@@ -691,6 +716,7 @@ class Torcp:
 
         else:
             logger.info('Skip BDMV/ISO  %s ' % mediaSrc)
+            self.record_skip(os.path.basename(mediaSrc), "BDMV (use --full-bdmv)")
 
     def processMusic(self, mediaSrc, folderCat, folderGenName):
         # destCatFolderName = os.path.join(folderCat, folderGenName)
@@ -706,6 +732,7 @@ class Torcp:
                 self.targetDirHook(os.path.join('MovieM2TS', folderGenName), tmdbidstr=str(folderTmdbParser.tmdbid), tmdbcat=folderTmdbParser.tmdbcat, tmdbtitle=folderTmdbParser.title, tmdbobj=folderTmdbParser)
             else:
                 logger.info('Skip BDMV/ISO  %s ' % mediaSrc)
+                self.record_skip(os.path.basename(mediaSrc), "BDMV (use --full-bdmv)")
             return
 
         if not os.path.isdir(mediaSrc):
@@ -749,6 +776,7 @@ class Torcp:
 
             if not self.isMediaFileType(file_ext):
                 logger.info('Skip : %s ' % movieItem)
+                self.record_skip(movieItem, "unsupported file type")
                 continue
 
             p = folderTmdbParser
@@ -900,6 +928,7 @@ class Torcp:
         mediaSrc = os.path.join(cpLocation, itemName)
         if os.path.islink(mediaSrc):
             logger.info('SKIP symbolic link: [%s] ' % mediaSrc)
+            self.record_skip(itemName, "symbolic link")
             return
 
         logger.info(" >> [%s] %s %s" % (itemName, imdbidstr, tmdbidstr))
@@ -969,8 +998,10 @@ class Torcp:
                     self.targetDirHook(bdmvFolder, tmdbidstr='', tmdbcat='iso', tmdbtitle=itemName, tmdbobj=None)
                 else:
                     logger.info('Skip .iso file:  %s ' % mediaSrc)
+                    self.record_skip(itemName, "ISO file (use --full-bdmv)")
             else:
                 logger.info('Skip file:  %s ' % mediaSrc)
+                self.record_skip(itemName, "unsupported file type")
         else:
             if cat == self.CATNAME_TV:
                 self.copyTVFolderItems(mediaSrc, destFolderName, p.season, p.group,
@@ -996,6 +1027,7 @@ class Torcp:
                 self.targetDirHook(os.path.join(cat, itemName), tmdbidstr='', tmdbcat='audio', tmdbtitle=itemName, tmdbobj=None)
             elif cat in ['eBook']:
                 logger.info('Skip eBoook: [%s], %s ' % (cat, mediaSrc))
+                self.record_skip(itemName, "eBook")
                 # if you don't want to skip these, comment up and uncomment below
                 # targetCopy(mediaSrc, p.cat)
             else:
@@ -1148,6 +1180,12 @@ class Torcp:
         parser.add_argument('--clear-tmdb-cache',
                             action='store_true',
                             help='clear TMDB cache before running')
+        parser.add_argument('--save-skipped',
+                            type=str,
+                            help='save skipped items list to specified file')
+        parser.add_argument('--save-failed',
+                            type=str,
+                            help='save failed items list to specified file')
 
         self.ARGS = parser.parse_args(argv)
         self.ensureIMDb()
@@ -1237,6 +1275,51 @@ class Torcp:
     def processWithSameTIMDb(self, parentFolder, folderImdb, folderTmdb):
         for item in os.listdir(parentFolder):
             self.processOneDirItem(parentFolder, item, imdbidstr=folderImdb, tmdbidstr=folderTmdb)
+
+    def print_summary(self):
+        """Print processing summary at end of run."""
+        total = self.stats['processed'] + len(self.stats['skipped']) + len(self.stats['failed'])
+        if total == 0:
+            return
+
+        print(f"\n{'='*50}")
+        print(f"Processing Summary")
+        print(f"{'='*50}")
+        print(f"Total items:     {total}")
+        print(f"Processed:       {self.stats['processed']}")
+        print(f"Skipped:         {len(self.stats['skipped'])}")
+        print(f"Failed:          {len(self.stats['failed'])}")
+
+        if self.stats['skipped']:
+            print(f"\nSkipped items:")
+            # Group by reason
+            by_reason = {}
+            for item, reason in self.stats['skipped']:
+                by_reason.setdefault(reason, []).append(item)
+            for reason, items in by_reason.items():
+                print(f"  [{reason}] ({len(items)} items)")
+                for item in items[:5]:  # Show first 5
+                    print(f"    - {item}")
+                if len(items) > 5:
+                    print(f"    ... and {len(items) - 5} more")
+
+        if self.stats['failed']:
+            print(f"\nFailed items:")
+            for item, reason in self.stats['failed']:
+                print(f"  - {item}: {reason}")
+
+    def save_report_to_file(self, filepath, items, header):
+        """Save items list to file."""
+        from datetime import datetime
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(f"# {header}\n")
+                f.write(f"# Generated: {datetime.now().isoformat()}\n\n")
+                for item, reason in items:
+                    f.write(f"{item}\t{reason}\n")
+            logger.info(f"Saved {header} to {filepath}")
+        except IOError as e:
+            logger.warning(f"Failed to save {header}: {e}")
 
     def main(self, argv=None, exportObject=None):
         self.EXPORT_OBJ = exportObject
@@ -1336,6 +1419,13 @@ class Torcp:
         # Save TMDB cache
         if self.tmdb_cache:
             self.tmdb_cache.close()
+
+        # Print summary and save reports
+        self.print_summary()
+        if self.ARGS.save_skipped and self.stats['skipped']:
+            self.save_report_to_file(self.ARGS.save_skipped, self.stats['skipped'], "Skipped Items")
+        if self.ARGS.save_failed and self.stats['failed']:
+            self.save_report_to_file(self.ARGS.save_failed, self.stats['failed'], "Failed Items")
 
 
 def main():
