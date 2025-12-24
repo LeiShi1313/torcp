@@ -48,7 +48,7 @@ class TorcpProgress:
             console=self.progress.console,
             show_time=True,
             show_path=False,
-            markup=True,
+            markup=False,
             rich_tracebacks=True
         )
         rich_handler.setFormatter(logging.Formatter("%(message)s"))
