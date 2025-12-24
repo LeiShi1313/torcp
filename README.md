@@ -14,6 +14,7 @@
 * [刮削攻略](刮削攻略.md)
 
 ## 2 Last Update
+* 2025.12.24 `--progress` 显示进度条，处理大量文件时可显示处理进度
 * 2025.7.27 支持strm；更新 tmdbv3api
 * 2024.11.21 查 IMDb 由 episode 获取 series 的 IMDb，再查 TMDb
 * 2024.10.23 `--add-year-dir` 在媒体名称目录之上，加一层年份目录
@@ -84,6 +85,7 @@ usage: tp.py [-h] -d HD_PATH [-e KEEP_EXT] [-l LANG] [--genre GENRE] [--other-di
              [--tv-folder-name TV_FOLDER_NAME] [--movie-folder-name MOVIE_FOLDER_NAME] [--tv] [--movie] [--dryrun] [--single] [--extract-bdmv] [--full-bdmv] [--origin-name] [--tmdb-origin-name]
              [--sleep SLEEP] [--move-run] [--make-log] [--symbolink] [--cache] [--emby-bracket] [--plex-bracket] [--make-plex-match] [--make-nfo] [--after-copy-script AFTER_COPY_SCRIPT]
              [--imdbid IMDBID] [--tmdbid TMDBID] [--extitle EXTITLE] [--site-str SITE_STR] [--add-year-dir] [--genre-with-area GENRE_WITH_AREA]
+             [--progress]
              MEDIA_DIR
 
 torcp: a script hardlink media files and directories in Emby-happy naming and structs.
@@ -137,7 +139,8 @@ options:
   --site-str SITE_STR   site-id(ex. hds-12345) folder name, set site strs like ('chd,hds,ade,ttg').
   --add-year-dir        Add a year dir above the media folder
   --genre-with-area GENRE_WITH_AREA
-                        specify genres with area subdir, seperated with comma  
+                        specify genres with area subdir, seperated with comma
+  --progress            enable progress bar display
 ```
 
 

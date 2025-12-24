@@ -24,6 +24,7 @@ from torcp.tmdbparser import TMDbNameParser
 from torcp.torcategory import TorCategory
 from torcp.tortitle import TorTitle, is0DayName
 from torcp.cacheman import CacheManager
+from torcp.progress import TorcpProgress
 import xml.etree.ElementTree as ET
 
 def area5dir(arecode):
@@ -71,6 +72,7 @@ class Torcp:
         self.EXPORT_OBJ = None
         self.CATNAME_TV = 'TV'
         self.CATNAME_MOVIE = 'Movie'
+        self.progress = None  # Will be initialized after args are parsed
 
     def ensureDir(self, file_path):
         if os.path.isfile(file_path):
@@ -116,7 +118,11 @@ class Torcp:
             logger.info('SKIP symbolic link: [%s] ' % fromLoc)
             return
         destDir = self.getDestDir(toLocPath)
-            
+
+        # Show progress status for hardlink operation
+        if self.progress:
+            self.progress.set_status(f"Hardlink: {os.path.basename(fromLoc)[:30]}")
+
         if not self.ARGS.dryrun:
             self.ensureDir(destDir)
             self.makeLogfile(fromLoc, destDir)
@@ -158,6 +164,10 @@ class Torcp:
         # destDir = os.path.join(self.ARGS.hd_path, toLocFolder)
         destDir = self.getDestDir(toLocFolder)
 
+        # Show progress status for move operation
+        if self.progress:
+            self.progress.set_status(f"Moving: {os.path.basename(fromLoc)[:30]}")
+
         if not self.ARGS.dryrun:
             self.ensureDir(destDir)
             self.makeLogfile(fromLoc, toLocFolder)
@@ -193,6 +203,11 @@ class Torcp:
             return
         # destDir = os.path.join(self.ARGS.hd_path, toLocPath)
         destDir = self.getDestDir(toLocPath)
+
+        # Show progress status for symlink operation
+        if self.progress:
+            self.progress.set_status(f"Symlink: {os.path.basename(fromLoc)[:30]}")
+
         if not self.ARGS.dryrun:
             self.ensureDir(destDir)
             self.makeLogfile(fromLoc, toLocPath)
@@ -887,6 +902,12 @@ class Torcp:
 
         logger.info(" >> [%s] %s %s" % (itemName, imdbidstr, tmdbidstr))
         cat = self.setArgsCategory()
+
+        # Show TMDB search status
+        if self.progress and self.ARGS.tmdb_api_key:
+            displayName = itemName[:35] + "..." if len(itemName) > 35 else itemName
+            self.progress.set_status(f"TMDB: {displayName}")
+
         p = TMDbNameParser(self.ARGS.tmdb_api_key, self.ARGS.tmdb_lang, ccfcat_hard=cat)
         p.parse(itemName, useTMDb=(self.ARGS.tmdb_api_key is not None), hasIMDbId=imdbidstr, hasTMDbId=tmdbidstr, exTitle=self.ARGS.extitle)
         p.title = self.fixNtName(p.title)
@@ -1116,6 +1137,9 @@ class Torcp:
         parser.add_argument('--genre-with-area',
                             default='',
                             help='specify genres with area subdir, seperated with comma')
+        parser.add_argument('--progress',
+                            action='store_true',
+                            help='enable progress bar display')
 
         self.ARGS = parser.parse_args(argv)
         self.ensureIMDb()
@@ -1212,6 +1236,9 @@ class Torcp:
         cpLocation = self.ARGS.MEDIA_DIR
         cpLocation = os.path.abspath(cpLocation)
 
+        # Initialize progress bar
+        self.progress = TorcpProgress(disable=not self.ARGS.progress)
+
         logger.info("=========>>> " +
             datetime.datetime.now().astimezone().strftime("%Y-%m-%dT%H:%M:%S %z"))
 
@@ -1223,28 +1250,41 @@ class Torcp:
         argTMDb = self.ARGS.tmdbid if (self.ARGS.single and self.ARGS.tmdbid) else ''
 
         if os.path.isfile(cpLocation):
+            self.progress.start(1, "Processing file")
+            self.progress.set_status(os.path.basename(cpLocation)[:50])
             self.processOneDirItem(os.path.dirname(cpLocation),
                             os.path.basename(os.path.normpath(cpLocation)), imdbidstr=argIMDb, tmdbidstr=argTMDb)
+            self.progress.update(advance=1)
+            self.progress.stop()
         else:
             if self.ARGS.single and not self.isCollections(cpLocation):
                 # processOneDirItem(os.path.dirname(cpLocation),
                 #                   os.path.basename(os.path.normpath(cpLocation)), imdbidstr)
-                
+
                 parentLocation, itemName, folderimdb, folderTmdb = self.parseFolderIMDbId(os.path.dirname(cpLocation),
                                 os.path.basename(os.path.normpath(cpLocation)))
+                self.progress.start(1, "Processing")
+                self.progress.set_status(itemName[:50])
                 if argIMDb or argTMDb:
                     self.processOneDirItem(parentLocation, itemName, imdbidstr=argIMDb, tmdbidstr=argTMDb)
                 elif folderimdb or folderTmdb:
                     self.processWithSameTIMDb(parentLocation, folderImdb=folderimdb, folderTmdb=folderTmdb)
                 else:
                     self.processOneDirItem(parentLocation, itemName, imdbidstr=folderimdb, tmdbidstr=folderTmdb)
+                self.progress.update(advance=1)
+                self.progress.stop()
 
             else:
-                for torFolderItem in os.listdir(cpLocation):
-                    if self.uselessFile(torFolderItem):
-                        continue
-                    
+                # Get list of items and filter useless files for accurate count
+                allItems = [item for item in os.listdir(cpLocation) if not self.uselessFile(item)]
+                self.progress.start(len(allItems), "Processing media")
+
+                for idx, torFolderItem in enumerate(allItems):
                     parentLocation, itemName, folderimdb, folderTmdb = self.parseFolderIMDbId(cpLocation, torFolderItem)
+
+                    # Update progress with current item name
+                    displayName = itemName[:40] + "..." if len(itemName) > 40 else itemName
+                    self.progress.update(description=f"[{idx+1}/{len(allItems)}] Processing", status=displayName)
 
                     if self.isCollections(itemName) and os.path.isdir(
                             os.path.join(parentLocation, itemName)):
@@ -1262,6 +1302,7 @@ class Torcp:
                         if self.ARGS.cache:
                             if searchCache.isCached(itemName):
                                 logger.info('Skipping. File previously linked: %s ' % (itemName))
+                                self.progress.update(advance=1)
                                 continue
                             else:
                                 searchCache.append(itemName)
@@ -1270,15 +1311,19 @@ class Torcp:
                     else:
                         self.processOneDirItem(parentLocation, itemName, imdbidstr=folderimdb, tmdbidstr=folderTmdb)
 
+                    self.progress.update(advance=1)
+
+                self.progress.stop()
+
         if self.ARGS.cache:
             searchCache.closeCache()
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(funcName)s %(message)s')
     o = Torcp()
     o.main()
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO,  format='%(asctime)s %(levelname)s %(funcName)s %(message)s')
     main()

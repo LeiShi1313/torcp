@@ -8,6 +8,7 @@ A script to organize media files in Emby-happy way, create hardlink in a seperat
 
 ## Last update:
 * ...refer to [chinese version](README.md).....
+* 2025.12.24: `--progress` enable progress bar display when processing files
 * 2022.4.3: `--make-log` create a log file to trace the origin file location and folder name
 * 2022.3.23: `--symbolink` support symbol link
 * 2022.3.13: `--lang` dispatch to different folders base on TMDb language
