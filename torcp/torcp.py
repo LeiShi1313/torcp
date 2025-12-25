@@ -75,6 +75,7 @@ class Torcp:
         self.CATNAME_MOVIE = 'Movie'
         self.progress = None  # Will be initialized after args are parsed
         self.tmdb_cache = None  # Will be initialized after args are parsed
+        self._item_work_done = False  # Track if actual work was done for current item
         # Processing statistics
         self.stats = {
             'processed': 0,
@@ -158,6 +159,7 @@ class Torcp:
                 else:
                     logger.info('ln %s %s ' % (fromLoc, destFile))
                     os.link(fromLoc, destFile)
+                self._item_work_done = True
             else:
                 logger.info('Target Exists: [%s] ' % destFile)
 
@@ -169,6 +171,7 @@ class Torcp:
                 else:
                     logger.info('copytree %s %s ' % (fromLoc, destDir))
                     shutil.copytree(fromLoc, destDir, copy_function=os.link)
+                self._item_work_done = True
             else:
                 logger.info('Target Exists: [%s] ' % destDir)
         else:
@@ -207,6 +210,7 @@ class Torcp:
                 else:
                     logger.info('mv %s %s' % (fromLoc, destFile))
                     os.rename(fromLoc, destFile)
+                self._item_work_done = True
             else:
                 logger.info('Target Exists: [%s] ' % destFile)
         else:
@@ -217,6 +221,7 @@ class Torcp:
                 else:
                     logger.info('mvdir %s %s ' % (fromLoc, destDir))
                     shutil.move(fromLoc, destDir)
+                self._item_work_done = True
             else:
                 logger.info('Target Exists: [%s] ' % destDir)
 
@@ -246,6 +251,7 @@ class Torcp:
                 else:
                     logger.info('ln -s %s %s' % (fromLoc, destFile))
                     os.symlink(fromLoc, destFile)
+                self._item_work_done = True
             else:
                 logger.info('Target Exists: [%s] ' % destFile)
 
@@ -256,6 +262,7 @@ class Torcp:
                 if not self.ARGS.dryrun:
                     os.symlink(fromLoc, destDir)
                     # shutil.copytree(fromLoc, destDir, copy_function=os.link)
+                self._item_work_done = True
             else:
                 logger.info('Target Exists: [%s] ' % destDir)
         else:
@@ -686,6 +693,14 @@ class Torcp:
         if self.ARGS.tmdb_api_key and parser.tmdbid <= 0 and effective_tmdbcat in ['tv', 'movie']:
             return self.ARGS.tmdb_not_found_folder
 
+        # When filename parsing (ccfcat) says movie but TMDb says tv,
+        # trust the filename - TMDb multi-search may return wrong type
+        # ccfcat can be 'Movie', 'MovieBDMV', 'MovieEncode', 'MovieRemux', etc.
+        ccfcat_lower = parser.ccfcat.lower() if parser.ccfcat else ''
+        if ccfcat_lower.startswith('movie') and effective_tmdbcat == 'tv':
+            logger.warning(f'TMDb returned TV but filename suggests Movie: {parser.title}')
+            effective_tmdbcat = 'movie'
+
         if effective_tmdbcat == 'movie':
             self.CATNAME_MOVIE = self.ARGS.movie_folder_name
             return self.ARGS.movie_folder_name
@@ -719,7 +734,7 @@ class Torcp:
             folderName = folderGenList[0]
             diskName = "" if len(folderGenList) <= 1 else folderGenList[1]
 
-            if tmdbParser and tmdbParser.tmdbcat == 'tv':
+            if catFolder == self.CATNAME_TV:
                 m = re.search(r"(S|Season)(\d+)", diskName, re.I)
                 if m:
                     ssName = "S%02d" % int(m[2])
@@ -951,7 +966,10 @@ class Torcp:
         # exportTargetDir = os.path.join(ARGS.hd_path, targetDir)
         exportTargetDir = targetDir
         logger.info('Target Dir: ' + exportTargetDir)
-        self.record_success()
+        if self._item_work_done:
+            self.record_success()
+        else:
+            self.record_skip(self.CUR_MEDIA_NAME, "target exists")
         if self.EXPORT_OBJ:
             self.EXPORT_OBJ.onOneItemTorcped(exportTargetDir, self.CUR_MEDIA_NAME, tmdbidstr, tmdbcat, tmdbtitle, tmdbobj)
         if self.ARGS.after_copy_script:
@@ -963,6 +981,7 @@ class Torcp:
 
     def processOneDirItem(self, cpLocation, itemName, imdbidstr='', tmdbidstr=''):
         self.CUR_MEDIA_NAME = itemName
+        self._item_work_done = False  # Reset for each new item
         mediaSrc = os.path.join(cpLocation, itemName)
         if os.path.islink(mediaSrc):
             logger.info('SKIP symbolic link: [%s] ' % mediaSrc)

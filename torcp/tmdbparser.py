@@ -39,11 +39,14 @@ def transFromCCFCat(cat):
 
 
 def transToCCFCat(mediatype, originCat):
+    # If title parsing determined it's a movie category (Movie, MovieBDMV, MovieEncode, etc.),
+    # trust it over TMDB's tv result - TMDB multi-search may return wrong media type
+    if re.match(r'(movie)', originCat, re.I):
+        return originCat
     if mediatype == 'tv':
         return 'TV'
     elif mediatype == 'movie':
-        if not re.match(r'(movie)', originCat, re.I):
-            return 'Movie'
+        return 'Movie'
     return originCat
 
 
